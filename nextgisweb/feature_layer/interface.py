@@ -66,6 +66,10 @@ class IWritableFeatureLayer(IFeatureLayer):
         """ Save feature in a layer """
 
 
+class IAuditableFeatureLayer(IWritableFeatureLayer):
+    """ Feature layer that supports auditing """
+
+
 class IFeatureQuery(Interface):
 
     def fields(self, *args):

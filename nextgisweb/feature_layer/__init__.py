@@ -8,6 +8,7 @@ from .interface import (
     FIELD_TYPE,
     IFeatureLayer,
     IWritableFeatureLayer,
+    IAuditableFeatureLayer,
     IFeatureQuery,
     IFeatureQueryFilter,
     IFeatureQueryFilterBy,

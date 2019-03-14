@@ -52,6 +52,7 @@ from ..feature_layer import (
     FIELD_TYPE,
     IFeatureLayer,
     IWritableFeatureLayer,
+    IAuditableFeatureLayer,
     IFeatureQuery,
     IFeatureQueryFilter,
     IFeatureQueryFilterBy,
@@ -376,7 +377,7 @@ class VectorLayer(Base, Resource, SpatialLayerMixin, LayerFieldsMixin):
 
     __scope__ = DataScope
 
-    implements(IFeatureLayer, IWritableFeatureLayer, IBboxLayer)
+    implements(IFeatureLayer, IWritableFeatureLayer, IAuditableFeatureLayer, IBboxLayer)
 
     tbl_uuid = db.Column(db.Unicode(32), nullable=False)
     geometry_type = db.Column(db.Enum(*GEOM_TYPE.enum), nullable=False)

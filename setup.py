@@ -31,6 +31,7 @@ requires = [
     'requests==2.21.0',
     'babel==2.6.0',
     'minio==4.0.10',
+    'aniso8601==6.0.0',
 ]
 
 extras_require = {
