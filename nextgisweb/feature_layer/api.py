@@ -19,6 +19,8 @@ from shapely.geometry import mapping
 from pyramid.response import Response
 from pyramid.httpexceptions import HTTPNoContent
 
+from .. import db
+from ..models import DBSession
 from ..geometry import geom_from_wkt, box
 from ..resource import DataScope, ValidationError, Resource, resource_factory
 from ..spatial_ref_sys import SRS
@@ -539,6 +541,53 @@ def count(resource, request):
         json.dumps(dict(total_count=total_count)),
         content_type=b'application/json')
 
+def heatmap(resource, request):
+    request.resource_permission(PERM_READ)
+
+    p_bbox = map(
+        float, request.params.get("bbox").split(",")
+    )
+    p_sizex = float(request.params.get("sizex"))
+    p_sizey = float(request.params.get("sizey"))
+    p_field = request.params.get("field")
+
+    fields = dict(
+        (f.keyname, f.fld_uuid) for f in resource.fields
+    )
+
+    conn = DBSession.connection()
+    clusters = conn.execute(
+        db.sql.text(
+            'SELECT ST_AsGeoJSON(ST_SnapToGrid("geom", :sizex, :sizey)) AS cluster, SUM("fld_{}") AS summary, COUNT(*) AS cnt '
+            'FROM vector_layer."layer_{}" '
+            'WHERE ST_Intersects("geom", ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, :srid)) '
+            'GROUP BY cluster'.format(
+                fields.get(p_field), resource.tbl_uuid
+            )
+        ),
+        sizex=p_sizex,
+        sizey=p_sizey,
+        minx=p_bbox[0],
+        miny=p_bbox[1],
+        maxx=p_bbox[2],
+        maxy=p_bbox[3],
+        srid=resource.srs.id
+    ).fetchall()
+
+    result = []
+    for cluster in clusters:
+        result.append(
+            {
+                "geom": cluster.cluster,
+                "summary": float(cluster.summary),
+                "count": cluster.cnt,
+            }
+        )
+
+    return Response(
+        json.dumps(result), content_type=b"application/json"
+    )
+
 
 def store_collection(layer, request):
     request.resource_permission(PERM_READ)
@@ -642,3 +691,8 @@ def setup_pyramid(comp, config):
     config.add_route(
         'feature_layer.identify', '/api/feature_layer/identify') \
         .add_view(identify, request_method='POST')
+
+    config.add_route(
+        'feature_layer.heatmap', '/api/resource/{id:\d+}/heatmap',
+        factory=resource_factory) \
+        .add_view(heatmap, context=IFeatureLayer, request_method='GET')
