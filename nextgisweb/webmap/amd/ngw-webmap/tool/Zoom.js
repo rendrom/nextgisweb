@@ -21,7 +21,7 @@ define([
             } else {
                 this.label = i18n.gettext("Zoom out");
                 this.customIcon = "<span class='ol-control__icon material-icons'>zoom_out</span>";
-            };
+            }
 
             this.interaction = new ol.interaction.DragZoom({
                 condition: ol.events.condition.always,
@@ -33,10 +33,11 @@ define([
 
         activate: function () {
             this.interaction.setActive(true);
-            if (!this.out)
-                this.display.mapContainer.domNode.style.cursor = "zoom-in"
-            else
+            if (!this.out) {
+                this.display.mapContainer.domNode.style.cursor = "zoom-in";
+            } else {
                 this.display.mapContainer.domNode.style.cursor = "zoom-out";
+            }
         },
 
         deactivate: function () {
