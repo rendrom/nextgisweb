@@ -49,6 +49,9 @@ class NextgiswebDatasource(DataSource):
             except:
                 raise BaseException(
                     message="Maxfearutes (count) paramether can't be cast to integer: %s" % (kwargs['maxfeatures']))
+            if self.maxfeatures < 0:
+				BaseException(
+                    message="Maxfeatures (count) paramether must be positive: %s" % (kwargs['maxfeatures']))
 
     @property
     def srid_out(self):
