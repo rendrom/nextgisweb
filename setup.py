@@ -38,6 +38,7 @@ requires = [
     'backports.tempfile==1.0',
     'pip==19.2.3', # https://github.com/pypa/pip/issues/7209
     'pyproj==2.2.2',
+    'python2-secrets==1.0.5',
     
     # TODO: Move to dev or test dependencies
     'pytest',

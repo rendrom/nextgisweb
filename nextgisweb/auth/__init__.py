@@ -8,6 +8,7 @@ from ..models import DBSession
 from .. import db
 
 from .models import Base, Principal, User, Group, UserDisabled
+from .oauth import OAuthServer
 from . import command # NOQA
 from .util import _
 
@@ -22,6 +23,7 @@ class AuthComponent(Component):
         super(AuthComponent, self).__init__(env, settings)
         self.settings_register = settings.get('register', 'false').lower() \
             in ('true', 'yes', '1')
+        self.oauth = OAuthServer.from_settings(settings)
 
     def initialize_db(self):
         self.initialize_user(

@@ -52,6 +52,7 @@ class User(Principal):
     superuser = sa.Column(sa.Boolean, nullable=False, default=False)
     disabled = sa.Column(sa.Boolean, nullable=False, default=False)
     password_hash = sa.Column(sa.Unicode)
+    oauth_subject = sa.Column(sa.Unicode, unique=True)
 
     __mapper_args__ = dict(polymorphic_identity='U')
 
@@ -103,7 +104,9 @@ class User(Principal):
         if not hasattr(self, '_admins'):
             self._admins = Group.filter_by(keyname='administrators').one()
 
-        return any([user for user in self._admins.members if user.principal_id == self.principal_id])
+        return any([
+            user for user in self._admins.members
+            if user.principal_id == self.principal_id])
 
     @property
     def password(self):
