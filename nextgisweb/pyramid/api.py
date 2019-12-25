@@ -3,17 +3,72 @@ from __future__ import unicode_literals
 import re
 import json
 import os.path
-from urllib2 import unquote
-from datetime import timedelta
+import pkg_resources
+import elasticapm
 import base64
 
+from urllib2 import unquote
+from datetime import timedelta
 from pyramid.response import Response, FileResponse
 from pyramid.httpexceptions import HTTPBadRequest, HTTPNotFound
+from elasticapm.utils import compat, get_url_dict
 
 from ..env import env
 from ..package import pkginfo
 
 from .util import ClientRoutePredicate
+
+
+def _get_data_from_request(request):
+    data = {
+        "headers": dict(**request.headers),
+        "method": request.method,
+        "socket": {
+            "remote_address": request.remote_addr,
+            "encrypted": request.scheme == "https",
+        },
+        "cookies": dict(**request.cookies),
+        "url": get_url_dict(request.url)
+    }
+    data["headers"].pop("Cookie", None)
+    return data
+
+
+def _get_data_from_response(response):
+    data = {"status_code": response.status_int}
+    if response.headers:
+        data["headers"] = {
+            key: ";".join(response.headers.getall(key))
+            for key in compat.iterkeys(response.headers)
+        }
+    return data
+
+
+class elasticapm_tween_factory(object):
+    def __init__(self, handler, registry):
+        self.handler = handler
+        self.registry = registry
+        self.client = elasticapm.Client(
+            framework_name="Pyramid",
+            framework_version=pkg_resources.get_distribution("pyramid").version,
+        )
+
+    def __call__(self, request):
+        self.client.begin_transaction("request")
+        response = self.handler(request)
+        t_name = (
+            request.matched_route.pattern
+            if request.matched_route
+            else request.view_name
+        )
+        t_name = " ".join((request.method, t_name)) if t_name else ""
+        t_result = "%sxx" % (response.status[0],)
+
+        elasticapm.set_context(lambda: _get_data_from_request(request), "request")
+        elasticapm.set_context(lambda: _get_data_from_response(response), "response")
+
+        self.client.end_transaction(t_name, t_result)
+        return response
 
 
 def _get_cors_olist():
@@ -332,6 +387,8 @@ def logo_put(request):
 
 
 def setup_pyramid(comp, config):
+    config.add_tween('nextgisweb.pyramid.api.elasticapm_tween_factory')
+
     config.add_tween(
         'nextgisweb.pyramid.api.cors_tween_factory',
         under=('pyramid_debugtoolbar.toolbar_tween_factory', 'INGRESS'))

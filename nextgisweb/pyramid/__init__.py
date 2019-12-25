@@ -9,11 +9,12 @@ from pkg_resources import resource_filename, get_distribution
 from collections import namedtuple
 
 from pyramid.authorization import ACLAuthorizationPolicy
-from pyramid.events import BeforeRender
+from pyramid.events import ApplicationCreated, BeforeRender, subscriber
 
 import pyramid_tm
 import pyramid_mako
 import sentry_sdk
+import elasticapm
 
 from sentry_sdk.integrations.pyramid import PyramidIntegration
 
@@ -224,6 +225,11 @@ class PyramidComponent(Component):
         config.add_request_method(amd_base, 'amd_base', property=True, reify=True)
 
         config.add_renderer('json', json_renderer)
+
+        # Elastic APM
+        @subscriber(ApplicationCreated)
+        def elasticapm_instrument(event):
+            elasticapm.instrument()
 
         return config
 
