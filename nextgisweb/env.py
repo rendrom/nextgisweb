@@ -1,31 +1,27 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function, absolute_import
-import os
 import re
-import codecs
-from ConfigParser import RawConfigParser
+import logging
+import six
+from collections import OrderedDict
 
 import sqlalchemy as sa
 
+from .lib.config import load_config
 from .component import Component, load_all
 from .package import pkginfo
+
+logger = logging.getLogger(__name__)
 
 
 class Env(object):
 
     def __init__(self, cfg=None):
         if cfg is None:
-            cfg = RawConfigParser()
-            cfg.readfp(codecs.open(os.environ.get('NEXTGISWEB_CONFIG'), 'r', 'utf-8'))
+            cfg = load_config(None)
 
-            for section in cfg.sections():
-                for item, value in cfg.items(section):
-                    cfg.set(section, item, value % os.environ)
-
-        cs = dict(cfg.items('core') if cfg.has_section('core') else ())
-
-        packages_ign = re.split(r'[,\s]+', cs.get('packages.ignore', ''))
-        components_ign = re.split(r'[,\s]+', cs.get('components.ignore', ''))
+        packages_ign = re.split(r'[,\s]+', cfg.get('core.packages.ignore', ''))
+        components_ign = re.split(r'[,\s]+', cfg.get('core.components.ignore', ''))
 
         load_all(
             packages_ignore=packages_ign,
@@ -41,12 +37,13 @@ class Env(object):
             if identity in components_ign:
                 continue
 
-            settings = dict(
-                cfg.items(identity)
-                if cfg.has_section(identity)
-                else ())
+            # Extract component options from config
+            cfgprefix = identity + '.'
+            cfgcomp = OrderedDict([
+                (k[len(cfgprefix):], v) for k, v in cfg.items()
+                if k.startswith(cfgprefix)])
 
-            instance = comp_class(env=self, settings=settings)
+            instance = comp_class(env=self, settings=cfgcomp)
             self._components[comp_class.identity] = instance
 
             assert not hasattr(self, identity), \
@@ -54,27 +51,35 @@ class Env(object):
 
             setattr(self, identity, instance)
 
-    def chain(self, meth):
+    def chain(self, meth, first='core'):
         """ Building a sequence of method calls with dependencies.
         ``core`` component dependency gets added automatically for all
         components, so that it is returned first.
 
         :param meth: Name of the method to build sequence for. """
 
-        seq = ['core', ]
+        seq = [first, ]
 
         def traverse(components):
             for c in components:
                 if c.identity not in traverse.seq:
                     if hasattr(getattr(c, meth), '_require'):
-                        traverse([self._components[i] for i in getattr(
-                            c, meth)._require])
+                        try:
+                            requirements = [self._components[i] for i in getattr(
+                                c, meth)._require]
+                        except KeyError:
+                            raise Exception(c)
+                        traverse(requirements)
                     traverse.seq.append(c.identity)
 
         traverse.seq = seq
-        traverse(self._components.itervalues())
+        traverse(self._components.values())
 
-        return [self._components[i] for i in traverse.seq]
+        result = list([self._components[i] for i in traverse.seq])
+        logger.debug(
+            "Chain for method [%s]: %s", meth,
+            ', '.join([c.identity for c in result]))
+        return result
 
     def initialize(self):
         for c in list(self.chain('initialize')):
@@ -94,7 +99,7 @@ class Env(object):
 
         for comp in self.chain('initialize'):
             if hasattr(comp, 'metadata'):
-                for key, tab in comp.metadata.tables.iteritems():
+                for key, tab in comp.metadata.tables.items():
                     ctab = tab.tometadata(metadata)
                     sa.event.listen(
                         ctab, 'after_create',
@@ -102,7 +107,7 @@ class Env(object):
                         # in comments, for debug purposes.
                         sa.DDL(
                             "COMMENT ON TABLE %(fullname)s IS "
-                            + "'" + comp.identity + "'"
+                            + "'" + comp.identity + "'"  # NOQA: W503
                         ))
 
         return metadata
@@ -124,12 +129,10 @@ class EnvMetaClass(type):
         return _env
 
 
-class env(object):
+class env(six.with_metaclass(EnvMetaClass, object)):
     """ Proxy-class for global environment access. Use it only
     where it is impossible to get access to current environment
     by other means. However in any case, simultaneous work with
     multiple environments is currently not supported an will hardly
     ever be needed. To get original object for which messages are
     proxied one can use constructor ``env()``. """
-
-    __metaclass__ = EnvMetaClass

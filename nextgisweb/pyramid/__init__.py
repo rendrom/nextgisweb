@@ -4,9 +4,9 @@ import os.path
 import re
 import warnings
 from hashlib import md5
-from StringIO import StringIO
 from pkg_resources import resource_filename, get_distribution
 from collections import namedtuple
+from six import StringIO
 
 from pyramid.authorization import ACLAuthorizationPolicy
 from pyramid.events import BeforeRender
@@ -17,6 +17,7 @@ import sentry_sdk
 
 from sentry_sdk.integrations.pyramid import PyramidIntegration
 
+from ..lib.config import Option
 from ..package import pkginfo
 from ..component import Component
 
@@ -46,13 +47,13 @@ class PyramidComponent(Component):
 
         is_debug = self.env.core.debug
 
+        settings['mako.imports'] = settings.get('mako.imports', []) + [
+            'import six', 'from nextgisweb.i18n import tcheck']
+
         # If debug is on, add mako-filter that checks
         # if the line was translated before output.
-
         if is_debug:
             settings['mako.default_filters'] = ['tcheck', 'h']
-            settings['mako.imports'] = settings.get('mako.imports', []) \
-                + ['from nextgisweb.i18n import tcheck', ]
 
         # If pyramid config doesn't state otherwise, use locale from,
         # core component, while this is not clear why we need that.
@@ -61,10 +62,9 @@ class PyramidComponent(Component):
         if plockey not in settings and self.env.core.locale_default is not None:
             settings[plockey] = self.env.core.locale_default
 
-        sentry_dsn = 'sentry_dsn'
-        if sentry_dsn in settings:
+        if 'sentry_dsn' in self.options:
             sentry_sdk.init(
-                settings[sentry_dsn],
+                self.options['sentry_dsn'],
                 integrations=[PyramidIntegration()],
             )
 
@@ -113,6 +113,10 @@ class PyramidComponent(Component):
         config.registry.settings['error.exc_response'] = error_handler
         config.include(exception)
 
+        config.add_tween(
+            'nextgisweb.pyramid.util.header_encoding_tween_factory',
+            over=('nextgisweb.pyramid.exception.unhandled_exception_tween_factory', ))
+
         # Access to Env through request.env
         config.add_request_method(
             lambda req: self._env, 'env',
@@ -127,8 +131,8 @@ class PyramidComponent(Component):
             event['tr'] = event['request'].localizer.translate
         config.add_subscriber(tr_subscriber, BeforeRender)
 
-        assert 'secret' in settings, 'Secret not set!'
-        authn_policy = AuthenticationPolicy(settings=settings)
+        authn_policy = AuthenticationPolicy(settings=dict(
+            secret=self.options['secret']))
         config.set_authentication_policy(authn_policy)
 
         authz_policy = ACLAuthorizationPolicy()
@@ -166,7 +170,7 @@ class PyramidComponent(Component):
                 warnings.filterwarnings('ignore', r'DEPRECATION: Python 2\.7 will reach')
                 pip_main(['freeze', ])
             h = md5()
-            h.update(buf.getvalue())
+            h.update(buf.getvalue().encode('utf-8'))
             static_key = '/' + h.hexdigest()
         finally:
             sys.stdout = stdout
@@ -207,7 +211,8 @@ class PyramidComponent(Component):
         config.add_route('amd_package', '/static%s/amd/*subpath' % static_key) \
             .add_view('nextgisweb.views.amd_package')
 
-        for comp in self._env.chain('setup_pyramid'):
+        chain = self._env.chain('setup_pyramid', first='pyramid')
+        for comp in chain:
             comp.setup_pyramid(config)
 
         def html_error_handler(request, err_info, exc, exc_info):
@@ -235,7 +240,7 @@ class PyramidComponent(Component):
     def client_settings(self, request):
         result = dict()
 
-        result['support_url'] = self.env.core.settings.get('support_url')
+        result['support_url'] = self.env.core.options['support_url']
 
         try:
             result['units'] = self.env.core.settings_get('core', 'units')
@@ -254,9 +259,11 @@ class PyramidComponent(Component):
 
         return result
 
-    settings_info = (
-        dict(key='secret', desc=u"Cookies encryption key (required)"),
-        dict(key='help_page', desc=u"HTML help"),
-        dict(key='favicon', desc=u"Favicon"),
-        dict(key='sentry_dsn', desc=u"Sentry DSN"),
+    option_annotations = (
+        Option('secret', required=True, doc="Cookies encryption key."),
+        Option('help_page.*'),
+        Option('logo'),
+        Option('favicon', default=resource_filename(
+            'nextgisweb', 'static/img/favicon.ico')),
+        Option('sentry_dsn'),
     )

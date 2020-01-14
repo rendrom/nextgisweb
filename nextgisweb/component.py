@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function, absolute_import
 import logging
+import warnings
+import six
 
+from .lib.config import ConfigOptions
 from .registry import registry_maker
 from .package import pkginfo
+
+logger = logging.getLogger(__name__)
 
 
 class ComponentMeta(type):
@@ -15,8 +20,7 @@ class ComponentMeta(type):
             cls.registry.register(cls)
 
 
-class Component(object):
-    __metaclass__ = ComponentMeta
+class Component(six.with_metaclass(ComponentMeta, object)):
 
     identity = None
     """ Component identifier that should be redefined in a
@@ -27,7 +31,12 @@ class Component(object):
 
     def __init__(self, env, settings):
         self._env = env
+
         self._settings = settings
+        self._options = ConfigOptions(
+            settings, self.option_annotations
+            if hasattr(self, 'option_annotations') else ())
+
         self._logger = logging.getLogger('nextgisweb.comp.' + self.identity)
 
     def initialize(self):
@@ -53,7 +62,7 @@ class Component(object):
 
     @property
     def env(self):
-        """ Environment this component belongs too. Set 
+        """ Environment this component belongs too. Set
         on class exemplar creation and not changed afterwards.
         This attribute should be used instead of global environment
         :py:class:`~nextgisweb.env.env`. """
@@ -62,7 +71,14 @@ class Component(object):
 
     @property
     def settings(self):
+        warnings.warn(
+            "Deprecated attribute component.settings, use component.options instead.",
+            DeprecationWarning, stacklevel=2)
         return self._settings
+
+    @property
+    def options(self):
+        return self._options
 
     @property
     def logger(self):
@@ -111,4 +127,10 @@ def load_all(packages_ignore=None, components_ignore=None):
         for comp in pkginfo.pkg_comp(pkg):
             if comp in components_ignore:
                 continue
-            __import__(pkginfo.comp_mod(comp))
+            try:
+                __import__(pkginfo.comp_mod(comp))
+            except Exception:
+                logger.error(
+                    "Failed to load component '%s' from module '%s'!",
+                    comp, pkginfo.comp_mod(comp))
+                raise

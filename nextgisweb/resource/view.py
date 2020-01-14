@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 import warnings
+import six
 
 from pyramid import httpexceptions
 from sqlalchemy import bindparam
@@ -96,11 +97,11 @@ def schema(request):
         resources[cls.identity] = dict(
             identity=cls.identity,
             label=request.localizer.translate(cls.cls_display_name),
-            scopes=cls.scope.keys())
+            scopes=list(cls.scope.keys()))
 
-    for k, scp in Scope.registry.iteritems():
+    for k, scp in six.iteritems(Scope.registry):
         spermissions = dict()
-        for p in scp.itervalues():
+        for p in scp.values():
             spermissions[p.name] = dict(
                 label=request.localizer.translate(p.label))
 
@@ -275,8 +276,8 @@ def setup_pyramid(comp, config):
     class ResourceMenu(DynItem):
         def build(self, args):
             permissions = args.obj.permissions(args.request.user)
-            for ident, cls in Resource.registry._dict.iteritems():
-                if ident in comp.disabled_cls:
+            for ident, cls in six.iteritems(Resource.registry._dict):
+                if ident in comp.options['disabled_cls']:
                     continue
 
                 if not cls.check_parent(args.obj):

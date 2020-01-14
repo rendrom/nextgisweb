@@ -9,18 +9,18 @@ from subprocess import check_call, check_output
 import io
 import json
 from distutils.version import LooseVersion
-from backports.functools_lru_cache import lru_cache
+import six
 
 import sqlalchemy as sa
 
 from ..registry import registry_maker
 from ..models import DBSession
-
+from ..compat import lru_cache
 
 logger = logging.getLogger(__name__)
 
 
-IR_FIELDS = ('id', 'identity', 'data')
+IR_FIELDS = ('id', 'identity', 'payload')
 IndexRecord = namedtuple('IndexRecord', IR_FIELDS)
 
 
@@ -63,8 +63,8 @@ class IndexFile(object):
 class BackupBase(object):
     registry = registry_maker()
 
-    def __init__(self, data):
-        self.data = data
+    def __init__(self, payload):
+        self.payload = payload
         self.component = None
 
     def bind(self, component):
@@ -106,10 +106,10 @@ def parse_pg_dump_version(output):
 
 def pg_connection_options(env):
     return [
-        '--host', env.core.settings['database.host'],
-        '--username', env.core.settings['database.user'],
-        '--dbname', env.core.settings['database.name'],
-    ], env.core.settings['database.password']
+        '--host', env.core.options['database.host'],
+        '--username', env.core.options['database.user'],
+        '--dbname', env.core.options['database.name'],
+    ], env.core.options['database.password']
 
 
 def backup(env, dst):
@@ -136,12 +136,14 @@ def backup(env, dst):
     pg_dir = os.path.join(dst, 'postgres')
     os.mkdir(pg_dir)
 
-    pgd_version = parse_pg_dump_version(check_output(['/usr/bin/pg_dump', '--version']))
+    pgd_version = parse_pg_dump_version(check_output(
+        ['/usr/bin/pg_dump', '--version']).decode('utf-8'))
+
     if pgd_version < LooseVersion('9.5'):
         snp_opt = []
         logger.warn(
             "Data inconsistency possible: ---snapshot option is not supported in pg_dump %s!",
-            unicode(pgd_version))
+            six.text_type(pgd_version))
     else:
         snp_opt = ['--snapshot={}'.format(snapshot), ]
 
@@ -165,7 +167,7 @@ def backup(env, dst):
     pg_listing = check_output([
         '/usr/bin/pg_restore',
         '--list', pg_dir
-    ])
+    ]).decode('utf-8')
 
     @lru_cache(maxsize=None)
     def get_cls_relname(oid):
@@ -229,9 +231,9 @@ def backup(env, dst):
         with idx_file.writer() as idx_write:
             for seq, itm in enumerate(comp.backup_objects(), start=1):
                 itm.bind(comp)
-                record = IndexRecord(id=seq, identity=itm.identity, data=itm.data)
+                record = IndexRecord(id=seq, identity=itm.identity, payload=itm.payload)
                 if itm.blob:
-                    binfn = os.path.join(comp_dir, unicode(seq))
+                    binfn = os.path.join(comp_dir, '{:08d}'.format(seq))
                     with io.open(binfn, 'wb') as fd:
                         itm.backup(fd)
 
@@ -283,10 +285,10 @@ def restore(env, src):
                 idx_file = IndexFile(idx_fn)
                 with idx_file.reader() as read:
                     for record in read:
-                        itm = BackupBase.registry[record.identity](record.data)
+                        itm = BackupBase.registry[record.identity](record.payload)
                         itm.bind(comp)
                         if itm.blob:
-                            binfn = os.path.join(comp_dir, unicode(record.id))
+                            binfn = os.path.join(comp_dir, '{:08d}'.format(record.id))
                             with io.open(binfn, 'rb') as fd:
                                 itm.restore(fd)
         con.execute('COMMIT')
