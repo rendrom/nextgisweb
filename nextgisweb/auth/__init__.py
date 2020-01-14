@@ -22,7 +22,8 @@ class AuthComponent(Component):
 
     def __init__(self, env, settings):
         super(AuthComponent, self).__init__(env, settings)
-        self.oauth = OAuthServer.from_settings(settings)
+        self.oauth = OAuthServer(self.options.with_prefix('oauth')) \
+            if self.options['oauth.enabled'] else None
 
     def initialize_db(self):
         self.initialize_user(
@@ -118,12 +119,29 @@ class AuthComponent(Component):
 
     option_annotations = (
         Option('register', bool, default=False, doc="Allow user registration."),
+
         Option(
             'login_route_name', default='auth.login',
             doc="Name of route for login page."),
         Option(
             'logout_route_name', default='auth.logout',
             doc="Name of route for logout page."),
+
+        Option('oauth.enabled', bool, default=False),
+        Option('oauth.register', bool, default=False),
+
+        Option('oauth.client_id'),
+        Option('oauth.client_secret'),
+
+        Option('oauth.auth_endpoint'),
+        Option('oauth.token_endpoint'),
+        Option('oauth.introspection_endpoint', default=None),
+        Option('oauth.userinfo_endpoint', default=None),
+
+        Option('oauth.userinfo.scope'),
+        Option('oauth.userinfo.subject'),
+        Option('oauth.userinfo.keyname'),
+        Option('oauth.userinfo.display_name'),
     )
 
 

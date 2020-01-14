@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function, absolute_import
 import re
-from urllib import urlencode
+import six
+from six.moves.urllib.parse import urlencode
 
 import requests
 
@@ -12,36 +13,20 @@ from .models import User, Group
 
 class OAuthServer(object):
 
-    @classmethod
-    def from_settings(cls, settings, prefix='oauth'):
-        self = cls()
+    def __init__(self, options):
+        self.register = options['register']
+        self.client_id = options['client_id']
+        self.client_secret = options['client_secret']
 
-        def get(key, default=None):
-            return settings.get(prefix + '.' + key, default)
+        self.auth_endpoint = options['auth_endpoint']
+        self.token_endpoint = options['token_endpoint']
+        self.introspection_endpoint = options['introspection_endpoint']
+        self.userinfo_endpoint = options['userinfo_endpoint']
 
-        enabled = get('enabled', 'false').lower() \
-            in ('true', 'yes', '1')
-
-        if not enabled:
-            return None
-
-        self.register = get('register', 'false').lower() \
-            in ('true', 'yes', '1')
-
-        self.client_id = get('client_id')
-        self.client_secret = get('client_secret')
-
-        self.auth_endpoint = get('auth_endpoint')
-        self.token_endpoint = get('token_endpoint')
-        self.introspection_endpoint = get('introspection_endpoint')
-        self.userinfo_endpoint = get('userinfo_endpoint')
-
-        self.userinfo_scope = get('userinfo.scope')
-        self.userinfo_subject = get('userinfo.subject')
-        self.userinfo_keyname = get('userinfo.keyname')
-        self.userinfo_display_name = get('userinfo.display_name')
-
-        return self
+        self.userinfo_scope = options['userinfo.scope']
+        self.userinfo_subject = options['userinfo.subject']
+        self.userinfo_keyname = options['userinfo.keyname']
+        self.userinfo_display_name = options['userinfo.display_name']
 
     def authorization_code_url(self, redirect_uri, **kwargs):
         qs = dict(
@@ -96,7 +81,7 @@ class OAuthServer(object):
             userinfo = self.query_userinfo(access_token)
 
         with DBSession.no_autoflush:
-            userinfo_subject = unicode(userinfo[self.userinfo_subject])
+            userinfo_subject = six.text_type(userinfo[self.userinfo_subject])
             user = User.filter_by(oauth_subject=userinfo_subject).first()
 
             if user is None:
@@ -109,7 +94,7 @@ class OAuthServer(object):
 
             if self.userinfo_display_name is not None:
                 user.display_name = ' '.join([
-                    unicode(userinfo[key])
+                    six.text_type(userinfo[key])
                     for key in re.split(r',\s*', self.userinfo_display_name)
                     if key in userinfo])
 
