@@ -15,6 +15,7 @@ def pkginfo():
     components = (
         'core',
         'pyramid',
+        'webpack',
         'auth',
         'resource',
         'resmeta',
