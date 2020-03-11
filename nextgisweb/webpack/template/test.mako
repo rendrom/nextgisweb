@@ -6,13 +6,13 @@
 <script>
     require(["dojo/domReady!"], function () {
         document.getElementById("testDijit").onclick = function () {
-            require(['@nextgisweb/webpack/test-dijit'], function (module) {
-                module.test();
+            require(['@nextgisweb/webpack'], function (module) {
+                module.testDijit();
             })
         };
         document.getElementById("testLodash").onclick = function () {
-            require(['@nextgisweb/webpack/test-lodash'], function (module) {
-                module.test();
+            require(['@nextgisweb/webpack'], function (module) {
+                module.testLodash();
             })
         };
     })

@@ -1,6 +1,6 @@
 const Dialog = require("dijit/Dialog");
-const lodash = require("lodash");
-const moment = require("moment");
+import _ from "lodash";
+import moment from 'moment';
 
 export function test() {
     alert("Test!");
