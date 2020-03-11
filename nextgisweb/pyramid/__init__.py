@@ -33,6 +33,7 @@ from .util import (
     persistent_secret)
 from .auth import AuthenticationPolicy
 from . import exception
+from . import command  # NOQA
 
 __all__ = ['viewargs', ]
 
